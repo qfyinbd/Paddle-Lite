@@ -2053,6 +2053,8 @@ struct ClipParam : ParamBase {
   Tensor* out{};
   float min{};
   float max{};
+  // for int8
+  WITH_INT8_CONFIG
 };
 
 struct PrintParam : ParamBase {

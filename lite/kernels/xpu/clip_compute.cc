@@ -21,7 +21,8 @@ namespace lite {
 namespace kernels {
 namespace xpu {
 
-void ClipCompute::Run() {
+template <typename InType, PrecisionType PType>
+void ClipCompute<InType, PType>::Run() {
   auto& param = this->template Param<param_t>();
   auto& ctx = this->ctx_->template As<XPUContext>();
   auto min_tensor = param.min_tensor;
@@ -34,12 +35,27 @@ void ClipCompute::Run() {
   if (max_tensor != nullptr) {
     max = max_tensor->data<float>()[0];
   }
-  int r = xdnn::clip_v2<float>(ctx.GetRawContext(),
-                               param.x->data<float>(),
-                               param.out->mutable_data<float>(TARGET(kXPU)),
-                               param.x->numel(),
-                               min,
-                               max);
+  int r = 0;
+  if (param.enable_int8) {
+    int8_t max_quantized =
+        max < param.input_scale
+            ? static_cast<int8_t>(max / param.input_scale * 127.f)
+            : 127;
+    int8_t min_quantized = static_cast<int8_t>(min / param.input_scale * 127.f);
+    r = xdnn::clip_v2<InType>(ctx.GetRawContext(),
+                              param.x->data<InType>(),
+                              param.out->mutable_data<InType>(TARGET(kXPU)),
+                              param.x->numel(),
+                              max_quantized,
+                              min_quantized);
+  } else {
+    r = xdnn::clip_v2<InType>(ctx.GetRawContext(),
+                              param.x->data<InType>(),
+                              param.out->mutable_data<float>(TARGET(kXPU)),
+                              param.x->numel(),
+                              min,
+                              max);
+  }
   CHECK_EQ(r, 0);
 }
 
@@ -48,8 +64,20 @@ void ClipCompute::Run() {
 }  // namespace lite
 }  // namespace paddle
 
+using clip_fp32 =
+    paddle::lite::kernels::xpu::ClipCompute<float, PRECISION(kFloat)>;
+using clip_int8 =
+    paddle::lite::kernels::xpu::ClipCompute<int8_t, PRECISION(kInt8)>;
+
+REGISTER_LITE_KERNEL(clip, kXPU, kFloat, kNCHW, clip_fp32, def)
+    .BindInput("X", {LiteType::GetTensorTy(TARGET(kXPU))})
+    .BindInput("Min", {LiteType::GetTensorTy(TARGET(kHost))})
+    .BindInput("Max", {LiteType::GetTensorTy(TARGET(kHost))})
+    .BindOutput("Out", {LiteType::GetTensorTy(TARGET(kXPU))})
+    .Finalize();
+
 REGISTER_LITE_KERNEL(
-    clip, kXPU, kFloat, kNCHW, paddle::lite::kernels::xpu::ClipCompute, def)
+    clip, kXPU, kInt8, kNCHW, clip_int8, DISABLE_XPU1_clip_INT8)
     .BindInput("X", {LiteType::GetTensorTy(TARGET(kXPU))})
     .BindInput("Min", {LiteType::GetTensorTy(TARGET(kHost))})
     .BindInput("Max", {LiteType::GetTensorTy(TARGET(kHost))})

@@ -41,6 +41,13 @@ bool ClipOpLite::AttachImpl(const cpp::OpDesc &op_desc, lite::Scope *scope) {
   param_.min = op_desc.GetAttr<float>("min");
   param_.max = op_desc.GetAttr<float>("max");
 
+#ifdef LITE_WITH_XPU
+  if (op_desc.HasAttr("X0_scale")) {
+    param_.enable_int8 = true;
+    param_.input_scale = op_desc.GetAttr<float>("X0_scale");
+    param_.output_scale = op_desc.GetAttr<float>("Out_scale");
+  }
+#endif
   return true;
 }
 
