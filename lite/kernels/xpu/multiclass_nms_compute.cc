@@ -83,7 +83,7 @@ void MulticlassNmsCompute::Run() {
 
   int r = 0;
   if (is_lod) {
-    r = xdnn::multiclass_nms3<float, int>(ctx.GetRawContext(),
+    r = xdnn::multiclass_nms<float, int>(ctx.GetRawContext(),
                                           boxes->data<float>(),
                                           scores->data<float>(),
                                           rois_num_vec,
